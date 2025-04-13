@@ -1,0 +1,7 @@
+{
+  "import_map": "import_map.json",
+  "env": {
+    "SUPABASE_URL": "your-supabase-url",
+    "SUPABASE_SERVICE_ROLE_KEY": "your-service-role-key"
+  }
+} 

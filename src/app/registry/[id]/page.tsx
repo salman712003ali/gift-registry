@@ -15,38 +15,47 @@ import { formatCurrency } from '@/lib/utils'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { Heart, Share2, MessageSquare, ShoppingCart } from 'lucide-react'
+import { Heart, Share2, MessageSquare, ShoppingCart, ArrowLeft } from 'lucide-react'
+import { RegistryAnalytics } from '@/components/registry-analytics'
 
-interface GiftItem {
-  id: string
-  name: string
-  price: number
-  quantity: number
-  description: string
-  url: string | null
-  registry_id: string
-  created_at: string
-  updated_at: string
-  user_id: string | null
-  is_favorite?: boolean
-  comments?: Comment[]
-  contributions?: {
-    amount: number
-    contributor_name: string
-    message: string
-    created_at: string
-  }[]
+interface Profile {
+  first_name: string;
+  last_name: string;
+}
+
+interface Contribution {
+  id: string;
+  amount: number;
+  message: string | null;
+  created_at: string;
+  user_id: string;
+  profiles: Profile | null;
 }
 
 interface Comment {
-  id: string
-  content: string
-  user_id: string
-  created_at: string
-  profile?: {
-    full_name: string
-    avatar_url: string | null
-  }
+  id: string;
+  content: string;
+  user_id: string;
+  created_at: string;
+  gift_item_id: string;
+  profiles: Profile | null;
+}
+
+interface GiftItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  description: string | null;
+  url: string | null;
+  registry_id: string;
+  created_at: string;
+  updated_at: string;
+  user_id: string | null;
+  is_purchased: boolean;
+  is_favorite?: boolean;
+  contributions: Contribution[];
+  comments: Comment[];
 }
 
 interface Registry {
@@ -59,6 +68,38 @@ interface Registry {
   user_id: string
   created_at: string
   updated_at: string
+}
+
+interface SupabaseRegistry {
+  id: string
+  title: string
+  description: string
+  occasion: string
+  event_date: string
+  is_private: boolean
+  user_id: string
+  created_at: string
+  updated_at: string
+}
+
+interface SupabaseGiftItem {
+  id: string
+  name: string
+  price: number
+  quantity: number
+  description: string
+  url: string | null
+  registry_id: string
+  created_at: string
+  updated_at: string
+  user_id: string | null
+  is_purchased: boolean
+  contributions: {
+    amount: number
+    contributor_name: string
+    message: string
+    created_at: string
+  }[]
 }
 
 export default function RegistryView() {
@@ -75,6 +116,7 @@ export default function RegistryView() {
   const [activeTab, setActiveTab] = useState('items')
   const [sortBy, setSortBy] = useState('newest')
   const [filterBy, setFilterBy] = useState('all')
+  const [contributionsRefreshKey, setContributionsRefreshKey] = useState(0)
   const supabase = createClient()
 
   useEffect(() => {
@@ -102,28 +144,58 @@ export default function RegistryView() {
         .single()
 
       if (registryError) throw registryError
-      setRegistry(registryData)
+      if (!registryData) throw new Error('Registry not found')
+      setRegistry(registryData as unknown as Registry)
 
       // Get current user ID for favorites check
       const { data: { user } } = await supabase.auth.getUser()
       const currentUserId = user?.id
 
-      // Fetch gift items with their contributions
+      // Fetch gift items with their contributions and contributor profiles
       const { data: itemsData, error: itemsError } = await supabase
         .from('gift_items')
         .select(`
-          *,
-          contributions (
+          id,
+          name,
+          price,
+          quantity,
+          description,
+          url,
+          registry_id,
+          created_at,
+          updated_at,
+          user_id,
+          is_purchased,
+          contributions!left (
+            id,
             amount,
-            contributor_name,
             message,
-            created_at
+            created_at,
+            user_id,
+            profiles!left (
+              first_name,
+              last_name
+            )
           )
         `)
         .eq('registry_id', params.id)
         .order('created_at', { ascending: false })
 
       if (itemsError) throw itemsError
+      if (!itemsData) throw new Error('No items found')
+
+      // Process the items to include contributor names
+      const processedItems = (itemsData as any[]).map(item => ({
+        ...item,
+        contributions: (item.contributions || []).map((contribution: any) => ({
+          ...contribution,
+          contributor_name: contribution.profiles 
+            ? `${contribution.profiles.first_name} ${contribution.profiles.last_name}`.trim() || 'Anonymous'
+            : 'Anonymous'
+        }))
+      })) as GiftItem[]
+
+      setGiftItems(processedItems)
 
       // Fetch comments separately
       const { data: commentsData } = await supabase
@@ -135,45 +207,51 @@ export default function RegistryView() {
           created_at,
           gift_item_id
         `)
-        .in('gift_item_id', itemsData.map(item => item.id))
+        .in('gift_item_id', processedItems.map(item => item.id))
         .order('created_at', { ascending: false })
 
       // Group comments by gift item ID
-      const commentsByItemId = new Map()
+      const commentsByItemId = new Map<string, Comment[]>()
       if (commentsData) {
-        commentsData.forEach(comment => {
-          if (!commentsByItemId.has(comment.gift_item_id)) {
-            commentsByItemId.set(comment.gift_item_id, [])
-          }
-          commentsByItemId.get(comment.gift_item_id).push(comment)
+        (commentsData as any[]).forEach((comment: any) => {
+          const comments = commentsByItemId.get(comment.gift_item_id) || []
+          comments.push({
+            id: comment.id,
+            content: comment.content,
+            user_id: comment.user_id,
+            created_at: comment.created_at,
+            gift_item_id: comment.gift_item_id,
+            profiles: comment.profiles
+          })
+          commentsByItemId.set(comment.gift_item_id, comments)
         })
       }
 
-      // Fetch favorites separately
-      const { data: favoritesData } = await supabase
-        .from('favorites')
-        .select('gift_item_id')
-        .eq('user_id', currentUserId)
+      // Fetch favorites separately if user is authenticated
+      let favoriteItemIds = new Set<string>()
+      if (currentUserId) {
+        const { data: favoritesData } = await supabase
+          .from('favorites')
+          .select('gift_item_id')
+          .eq('user_id', currentUserId)
 
-      // Create a set of favorite item IDs
-      const favoriteItemIds = new Set(favoritesData?.map(f => f.gift_item_id) || [])
+        // Create a set of favorite item IDs
+        favoriteItemIds = new Set(favoritesData?.map(f => f.gift_item_id) || [])
+      }
       
       // Process items to add is_favorite flag and comments
-      const processedItems = itemsData.map(item => ({
+      const itemsWithProfiles = processedItems.map(item => ({
         ...item,
         is_favorite: favoriteItemIds.has(item.id),
         comments: commentsByItemId.get(item.id) || []
-      }))
+      })) as GiftItem[]
       
       // Fetch user profiles for comments
-      const userIds = new Set<string>()
-      processedItems.forEach(item => {
-        if (item.comments) {
-          item.comments.forEach((comment: { user_id: string }) => {
-            userIds.add(comment.user_id)
-          })
-        }
-      })
+      const userIds = new Set<string>(
+        itemsWithProfiles.flatMap(item => 
+          (item.comments || []).map(comment => comment.user_id as string)
+        ).filter(Boolean)
+      )
       
       const { data: profilesData } = await supabase
         .from('profiles')
@@ -187,7 +265,7 @@ export default function RegistryView() {
       })
       
       // Add profile information to comments
-      const itemsWithProfiles = processedItems.map(item => {
+      const itemsWithProfilesAndProfiles = itemsWithProfiles.map(item => {
         if (item.comments) {
           return {
             ...item,
@@ -198,9 +276,9 @@ export default function RegistryView() {
           }
         }
         return item
-      })
+      }) as GiftItem[]
       
-      setGiftItems(itemsWithProfiles)
+      setGiftItems(itemsWithProfilesAndProfiles)
 
       // Generate QR code
       const registryUrl = `${window.location.origin}/registry/${params.id}`
@@ -221,6 +299,7 @@ export default function RegistryView() {
 
   const handleContributionAdded = () => {
     fetchRegistry()
+    setContributionsRefreshKey(prevKey => prevKey + 1)
     setSelectedItem(null)
   }
 
@@ -272,16 +351,45 @@ export default function RegistryView() {
     setFilterBy(value)
   }
 
+  const handlePurchase = async (itemId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please sign in to mark items as purchased')
+      return
+    }
+
+    try {
+      setLoading(true)
+      const { data: user, error: userError } = await supabase.auth.getUser()
+      if (userError) throw userError
+
+      const { error } = await supabase
+        .from('gift_items')
+        .update({ is_purchased: true })
+        .eq('id', itemId)
+
+      if (error) throw error
+      toast.success('Item marked as purchased')
+      fetchRegistry()
+    } catch (error: any) {
+      console.error('Error marking as purchased:', error)
+      toast.error('Failed to mark item as purchased')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const toggleFavorite = async (itemId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please sign in to add favorites')
+      return
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        toast.error('Please sign in to favorite items')
-        return
-      }
+      if (!user) throw new Error('No authenticated user')
 
-      const item = giftItems.find(i => i.id === itemId)
-      if (!item) return
+      const item = giftItems.find(item => item.id === itemId)
+      if (!item) throw new Error('Item not found')
 
       if (item.is_favorite) {
         // Remove from favorites
@@ -292,6 +400,7 @@ export default function RegistryView() {
           .eq('gift_item_id', itemId)
 
         if (error) throw error
+        toast.success('Removed from favorites')
       } else {
         // Add to favorites
         const { error } = await supabase
@@ -302,35 +411,13 @@ export default function RegistryView() {
           })
 
         if (error) throw error
+        toast.success('Added to favorites')
       }
 
-      // Update local state
-      setGiftItems(items =>
-        items.map(i =>
-          i.id === itemId ? { ...i, is_favorite: !i.is_favorite } : i
-        )
-      )
-
-      toast.success(item.is_favorite ? 'Removed from favorites' : 'Added to favorites')
-    } catch (error: any) {
-      console.error('Error toggling favorite:', error)
-      toast.error('Failed to update favorite status')
-    }
-  }
-
-  const handlePurchase = async (itemId: string) => {
-    try {
-      const { error } = await supabase
-        .from('gift_items')
-        .update({ is_purchased: true })
-        .eq('id', itemId)
-
-      if (error) throw error
-      toast.success('Item marked as purchased')
       fetchRegistry()
     } catch (error: any) {
-      console.error('Error marking item as purchased:', error)
-      toast.error(error.message)
+      console.error('Error toggling favorite:', error)
+      toast.error('Failed to update favorites')
     }
   }
 
@@ -344,12 +431,21 @@ export default function RegistryView() {
 
   return (
     <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex items-center mb-6">
+        <Button
+          variant="outline"
+          size="sm"
+          className="mr-4 gap-1"
+          onClick={() => router.push('/dashboard')}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Button>
         <div>
           <h1 className="text-3xl font-bold">{registry.title}</h1>
           <p className="text-muted-foreground">{registry.description}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="ml-auto flex gap-2">
           <Button variant="outline" onClick={handleShare}>
             <Share2 className="w-4 h-4 mr-2" />
             Share Registry
@@ -374,6 +470,7 @@ export default function RegistryView() {
           <TabsTrigger value="items">Gift Items</TabsTrigger>
           <TabsTrigger value="contributions">Contributions</TabsTrigger>
           <TabsTrigger value="share">Share</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="items">
@@ -486,7 +583,11 @@ export default function RegistryView() {
                           <div className="space-y-2">
                             {item.comments.map((comment) => (
                               <div key={comment.id} className="text-sm">
-                                <p className="font-medium">{comment.profile?.full_name || 'Anonymous'}</p>
+                                {comment.profiles ? (
+                                  <span className="font-medium">{comment.profiles.first_name} {comment.profiles.last_name}</span>
+                                ) : (
+                                  <span className="font-medium">Anonymous</span>
+                                )}
                                 <p className="text-muted-foreground">{comment.content}</p>
                               </div>
                             ))}
@@ -505,7 +606,7 @@ export default function RegistryView() {
           <div className="space-y-8">
             <div>
               <h2 className="text-2xl font-semibold mb-4">Recent Contributions</h2>
-              <ContributionsList registryId={params.id} />
+              <ContributionsList registryId={params.id} refreshKey={contributionsRefreshKey} />
             </div>
           </div>
         </TabsContent>
@@ -526,6 +627,15 @@ export default function RegistryView() {
                   </div>
                 </CardContent>
               </Card>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="analytics">
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-2xl font-semibold mb-4">Registry Analytics</h2>
+              <RegistryAnalytics registryId={params.id} refreshKey={contributionsRefreshKey} />
             </div>
           </div>
         </TabsContent>

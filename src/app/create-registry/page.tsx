@@ -18,9 +18,11 @@ interface FormData {
   occasion: string;
   event_date: string;
   is_private: boolean;
-  password: string;
   show_contributor_names: boolean;
-  allow_anonymous_contributions: boolean;
+  show_contribution_amounts: boolean;
+  allow_partial_contributions: boolean;
+  currency: string;
+  status: string;
 }
 
 export default function CreateRegistryPage() {
@@ -33,9 +35,11 @@ export default function CreateRegistryPage() {
     occasion: '',
     event_date: '',
     is_private: false,
-    password: '',
     show_contributor_names: true,
-    allow_anonymous_contributions: false
+    show_contribution_amounts: true,
+    allow_partial_contributions: true,
+    currency: 'USD',
+    status: 'active'
   })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -57,7 +61,7 @@ export default function CreateRegistryPage() {
         return
       }
 
-      // Ensure user exists in the public.users table
+      // Ensure user exists in the profiles table
       const { error: userError } = await supabase
         .rpc('ensure_user_exists', { user_id: user.id })
 
@@ -70,7 +74,7 @@ export default function CreateRegistryPage() {
       // Format the event date
       const formattedDate = formData.event_date ? new Date(formData.event_date).toISOString() : null
 
-      // Create the registry
+      // Create the registry with the new schema
       const { data: registry, error: registryError } = await supabase
         .from('registries')
         .insert([
@@ -80,11 +84,12 @@ export default function CreateRegistryPage() {
             occasion: formData.occasion,
             event_date: formattedDate,
             user_id: user.id,
-            privacy_settings: {
-              is_private: formData.is_private,
-              show_contributor_names: formData.show_contributor_names,
-              allow_anonymous_contributions: formData.allow_anonymous_contributions
-            }
+            is_private: formData.is_private,
+            show_contributor_names: formData.show_contributor_names,
+            show_contribution_amounts: formData.show_contribution_amounts,
+            allow_partial_contributions: formData.allow_partial_contributions,
+            currency: formData.currency,
+            status: formData.status
           }
         ])
         .select()
@@ -192,25 +197,10 @@ export default function CreateRegistryPage() {
                     className="h-4 w-4 rounded border-gray-300"
                   />
                   <Label htmlFor="is_private" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Make this registry private (password protected)
+                    Make this registry private
                   </Label>
                 </div>
               </div>
-
-              {formData.is_private && (
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    placeholder="Enter a password to protect your registry"
-                    required={formData.is_private}
-                  />
-                </div>
-              )}
 
               <div className="space-y-2">
                 <Label>Contribution Settings</Label>
@@ -230,16 +220,47 @@ export default function CreateRegistryPage() {
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    id="allow_anonymous_contributions"
-                    name="allow_anonymous_contributions"
-                    checked={formData.allow_anonymous_contributions}
+                    id="show_contribution_amounts"
+                    name="show_contribution_amounts"
+                    checked={formData.show_contribution_amounts}
                     onChange={handleChange}
                     className="h-4 w-4 rounded border-gray-300"
                   />
-                  <Label htmlFor="allow_anonymous_contributions" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Allow anonymous contributions
+                  <Label htmlFor="show_contribution_amounts" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Show contribution amounts
                   </Label>
                 </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="allow_partial_contributions"
+                    name="allow_partial_contributions"
+                    checked={formData.allow_partial_contributions}
+                    onChange={handleChange}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="allow_partial_contributions" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Allow partial contributions to gifts
+                  </Label>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="currency">Currency</Label>
+                <Select
+                  value={formData.currency}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, currency: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD ($)</SelectItem>
+                    <SelectItem value="EUR">EUR (€)</SelectItem>
+                    <SelectItem value="GBP">GBP (£)</SelectItem>
+                    <SelectItem value="INR">INR (₹)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
             <CardFooter className="flex justify-between">

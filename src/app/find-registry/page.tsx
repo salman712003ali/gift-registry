@@ -17,6 +17,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import debounce from "lodash/debounce";
+import { ArrowLeft, Search } from 'lucide-react'
 
 interface Registry {
   id: string;
@@ -31,7 +32,7 @@ interface Registry {
     show_contributor_names: boolean;
     allow_anonymous_contributions: boolean;
   };
-  users?: {
+  profiles?: {
     full_name: string | null;
   };
 }
@@ -60,21 +61,35 @@ export default function FindRegistryPage() {
 
   useEffect(() => {
     const fetchOccasions = async () => {
-      const { data, error } = await supabase
-        .from('registries')
-        .select('occasion')
-        .filter('privacy_settings->is_private', 'eq', false)
-        .not('occasion', 'is', null);
+      try {
+        // Simplified query - fetch all occasions
+        const { data, error } = await supabase
+          .from('registries')
+          .select('occasion')
+          .not('occasion', 'is', null);
 
-      if (!error && data) {
-        const uniqueOccasions = Array.from(
-          new Set(
-            data
-              .map(r => r.occasion as string)
-              .filter(Boolean)
-          )
-        );
-        setOccasions(uniqueOccasions);
+        if (error) {
+          console.error('Error fetching occasions:', error);
+          return;
+        }
+
+        console.log(`Found ${data.length} registries with occasions`);
+        
+        if (data && data.length > 0) {
+          const uniqueOccasions = Array.from(
+            new Set(
+              data
+                .map(r => r.occasion as string)
+                .filter(Boolean)
+            )
+          );
+          console.log('Unique occasions:', uniqueOccasions);
+          setOccasions(uniqueOccasions);
+        } else {
+          console.log('No occasions found');
+        }
+      } catch (error) {
+        console.error('Error fetching occasions:', error);
       }
     };
     fetchOccasions();
@@ -82,11 +97,19 @@ export default function FindRegistryPage() {
 
   const searchRegistries = async (term: string, sort: SortOption, occasion: string) => {
     setLoading(true);
+    console.log(`Searching registries with term: "${term}", sort: ${sort}, occasion: "${occasion}"`);
+    
     try {
+      // Simplified query - fetch all registries for now
       let query = supabase
         .from('registries')
-        .select('*, users(full_name)')
-        .filter('privacy_settings->is_private', 'eq', false);
+        .select('*, profiles(full_name)')
+      
+      // Skip privacy filter for debugging
+      // query = query.or(
+      //   `privacy_settings->is_private.eq.false,` +
+      //   `privacy_settings.is.null`
+      // );
 
       if (term) {
         query = query.or(
@@ -98,34 +121,34 @@ export default function FindRegistryPage() {
         query = query.eq('occasion', occasion);
       }
 
-      switch (sort) {
-        case 'date_newest':
-          query = query.order('event_date', { ascending: false });
-          break;
-        case 'date_oldest':
-          query = query.order('event_date', { ascending: true });
-          break;
-        case 'title_asc':
-          query = query.order('title', { ascending: true });
-          break;
-        case 'title_desc':
-          query = query.order('title', { ascending: false });
-          break;
-        case 'relevance':
-        default:
-          if (term) {
-            query = query.order('created_at', { ascending: false });
-          } else {
-            query = query.order('created_at', { ascending: false });
-          }
-      }
+      // Simplified sort - just use created_at
+      query = query.order('created_at', { ascending: false });
 
+      console.log('Executing query to fetch ALL registries...');
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error('Query error:', error);
+        throw error;
+      }
 
       // Cast the data to the Registry type
       const typedData = (data || []) as unknown as Registry[];
+      console.log(`Found ${typedData.length} registries in total`);
+      
+      // Debug all registries
+      if (typedData.length > 0) {
+        typedData.forEach((registry, index) => {
+          console.log(`Registry ${index + 1}:`, {
+            id: registry.id,
+            title: registry.title,
+            privacy_settings: registry.privacy_settings
+          });
+        });
+      } else {
+        console.log('No registries found at all');
+      }
+      
       setRegistries(typedData);
     } catch (error: any) {
       console.error('Error searching registries:', error);
@@ -182,123 +205,90 @@ export default function FindRegistryPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">Find a Registry</h1>
+    <div className="container py-8">
+      <div className="flex items-center mb-6">
+        <Button
+          variant="outline"
+          size="sm"
+          className="mr-4 gap-1"
+          onClick={() => router.push('/')}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+        <h1 className="text-3xl font-bold">Find Registry</h1>
+      </div>
+      
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        searchRegistries(searchTerm, sortBy, occasionFilter);
+      }} className="flex gap-2 mb-8">
+        <Input 
+          type="text" 
+          placeholder="Search by name, occasion, or description..." 
+          value={searchTerm}
+          onChange={handleSearchChange}
+          className="max-w-md"
+        />
+        <Button type="submit" disabled={loading}>
+          <Search className="h-4 w-4 mr-2" />
+          {loading ? 'Searching...' : 'Search'}
+        </Button>
+      </form>
+      
+      {loading ? (
+        <div className="text-center py-12">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          <p className="mt-4 text-muted-foreground">Searching registries...</p>
+        </div>
+      ) : registries.length > 0 ? (
+        <>
+          <div className="text-sm text-muted-foreground mb-4">
+            Found {registries.length} {registries.length === 1 ? 'registry' : 'registries'}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {registries.map((registry) => (
+              <Card
+                key={registry.id}
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push(`/registry/${registry.id}`)}
+              >
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle>{registry.title}</CardTitle>
+                      <CardDescription>{registry.description}</CardDescription>
+                    </div>
+                    <Badge variant="secondary">
+                      {registry.occasion}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>Created by: {registry.profiles?.full_name || 'Anonymous'}</span>
+                      <span>•</span>
+                      <span>Event date: {new Date(registry.event_date).toLocaleDateString()}</span>
+                    </div>
+                    <Button variant="ghost" className="ml-4">
+                      View Registry →
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="text-center py-12">
           <p className="text-muted-foreground">
-            Search for gift registries by name, occasion, or description
+            {searchTerm
+              ? 'No registries found matching your search. Try different keywords or filters.'
+              : 'Start typing to search for registries.'}
           </p>
         </div>
-
-        <Card className="mb-8">
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="search">Search registries</Label>
-                <Input
-                  id="search"
-                  value={searchTerm}
-                  onChange={handleSearchChange}
-                  placeholder="Enter registry name, occasion, or description..."
-                  className="w-full"
-                />
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <Label>Filter by occasion</Label>
-                  <Select value={occasionFilter} onValueChange={handleOccasionChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All occasions" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All occasions</SelectItem>
-                      {occasions.map((occasion) => (
-                        occasion && (
-                          <SelectItem key={occasion} value={occasion}>
-                            {occasion}
-                          </SelectItem>
-                        )
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex-1">
-                  <Label>Sort by</Label>
-                  <Select value={sortBy} onValueChange={handleSortChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sort by..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="relevance">Most relevant</SelectItem>
-                      <SelectItem value="date_newest">Newest first</SelectItem>
-                      <SelectItem value="date_oldest">Oldest first</SelectItem>
-                      <SelectItem value="title_asc">Title A-Z</SelectItem>
-                      <SelectItem value="title_desc">Title Z-A</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-              <p className="mt-4 text-muted-foreground">Searching registries...</p>
-            </div>
-          ) : registries.length > 0 ? (
-            <>
-              <div className="text-sm text-muted-foreground mb-4">
-                Found {registries.length} {registries.length === 1 ? 'registry' : 'registries'}
-              </div>
-              {registries.map((registry) => (
-                <Card
-                  key={registry.id}
-                  className="hover:shadow-lg transition-shadow cursor-pointer"
-                  onClick={() => router.push(`/registry/${registry.id}`)}
-                >
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle>{registry.title}</CardTitle>
-                        <CardDescription>{registry.description}</CardDescription>
-                      </div>
-                      <Badge variant="secondary">
-                        {registry.occasion}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span>Created by: {registry.users?.full_name || 'Anonymous'}</span>
-                        <span>•</span>
-                        <span>Event date: {new Date(registry.event_date).toLocaleDateString()}</span>
-                      </div>
-                      <Button variant="ghost" className="ml-4">
-                        View Registry →
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">
-                {searchTerm
-                  ? 'No registries found matching your search. Try different keywords or filters.'
-                  : 'Start typing to search for registries.'}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 } 

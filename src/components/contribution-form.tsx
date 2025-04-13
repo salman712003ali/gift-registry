@@ -24,6 +24,7 @@ export function ContributionForm({
 }: ContributionFormProps) {
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [formData, setFormData] = useState({
     amount: '',
     name: '',
@@ -50,21 +51,34 @@ export function ContributionForm({
         return
       }
 
+      // Get current user's session
+      const { data: { session } } = await supabase.auth.getSession()
+
+      // If user is logged in, use their ID
+      // If anonymous or not logged in, don't set user_id
+      const contributionData = {
+        gift_item_id: giftItemId,
+        amount: amount,
+        message: formData.message || null,
+        created_at: new Date().toISOString(),
+        user_id: isAnonymous ? null : (session?.user?.id || null)
+      }
+
       // Create the contribution
       const { error } = await supabase
         .from('contributions')
-        .insert({
-          gift_item_id: giftItemId,
-          registry_id: registryId,
-          amount: amount,
-          contributor_name: formData.name || null,
-          message: formData.message || null,
-          created_at: new Date().toISOString()
-        })
+        .insert(contributionData)
 
       if (error) throw error
 
       toast.success('Contribution added successfully')
+      
+      // Reset form
+      setFormData({
+        amount: '',
+        name: '',
+        message: ''
+      })
       
       // Call the onContributionAdded callback if provided
       if (onContributionAdded) {
@@ -95,15 +109,15 @@ export function ContributionForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="name">Your Name</Label>
-        <Input
-          id="name"
-          name="name"
-          value={formData.name}
-          onChange={handleChange}
-          placeholder="Enter your name"
+      <div className="flex items-center space-x-2 mb-4">
+        <input
+          type="checkbox"
+          id="isAnonymous"
+          checked={isAnonymous}
+          onChange={(e) => setIsAnonymous(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300"
         />
+        <Label htmlFor="isAnonymous">Make contribution anonymous</Label>
       </div>
 
       <div className="space-y-2">

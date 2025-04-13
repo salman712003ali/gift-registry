@@ -1,23 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  const supabase = createClient()
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,12 +25,14 @@ export default function SignUpPage() {
       // First check if email is valid
       if (!email || !password) {
         toast.error('Please enter both email and password')
+        setLoading(false)
         return
       }
 
       // Check password length
       if (password.length < 6) {
         toast.error('Password must be at least 6 characters long')
+        setLoading(false)
         return
       }
 
@@ -82,18 +82,28 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-md space-y-8 rounded-lg border p-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Create an account</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Sign up to get started
+    <div className="min-h-screen flex items-center justify-center bg-muted/20 p-4">
+      <div className="max-w-md w-full space-y-6 p-8 bg-background rounded-lg shadow-lg relative">
+        <Button
+          variant="outline"
+          size="sm"
+          className="absolute top-4 left-4 gap-1"
+          onClick={() => router.push('/')}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Home
+        </Button>
+        
+        <div className="flex flex-col space-y-2 pt-8">
+          <h2 className="text-center text-2xl font-bold">Create an account</h2>
+          <p className="text-center text-sm text-muted-foreground">
+            Sign up to create and manage your gift registries
           </p>
         </div>
 
-        <form onSubmit={handleSignUp} className="mt-8 space-y-6">
+        <form onSubmit={handleSignUp} className="space-y-6">
           <div className="space-y-4">
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
@@ -104,7 +114,7 @@ export default function SignUpPage() {
                 placeholder="Enter your email"
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
@@ -112,7 +122,8 @@ export default function SignUpPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                placeholder="Enter your password"
+                minLength={6}
+                placeholder="Enter your password (min. 6 characters)"
               />
             </div>
           </div>
@@ -120,19 +131,14 @@ export default function SignUpPage() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Creating account...' : 'Create account'}
           </Button>
-        </form>
-
-        <div className="mt-4 text-center text-sm">
-          <p>
-            Already have an account?{' '}
-            <a
-              href="/login"
-              className="font-medium text-primary hover:underline"
-            >
+          
+          <div className="text-center text-sm">
+            <span className="text-muted-foreground">Already have an account? </span>
+            <Link href="/login" className="text-primary hover:underline">
               Sign in
-            </a>
-          </p>
-        </div>
+            </Link>
+          </div>
+        </form>
       </div>
     </div>
   )

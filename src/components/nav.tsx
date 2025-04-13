@@ -1,119 +1,248 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
+import { Menu, Bell, LogOut, User, Settings, Home, Gift, Search, Plus } from 'lucide-react'
+import { ThemeToggle } from "@/components/ui/theme-toggle"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+
+interface Profile {
+  first_name: string | null
+  last_name: string | null
+  avatar_url: string | null
+  email: string | null
+}
+
+type DatabaseProfile = {
+  id: string
+  first_name: string | null
+  last_name: string | null
+  avatar_url: string | null
+  email: string | null
+  created_at: string
+  updated_at: string
+}
 
 export function Nav() {
-  const pathname = usePathname()
   const router = useRouter()
+  const pathname = usePathname()
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [loading, setLoading] = useState(true)
   const supabase = createClient()
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setIsAuthenticated(!!session)
-    }
-    checkSession()
+    getProfile()
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session)
+    // Set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        getProfile()
+      } else {
+        setProfile(null)
+      }
     })
 
-    return () => subscription.unsubscribe()
-  }, [supabase])
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const getProfile = async () => {
+    try {
+      setLoading(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session?.user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('first_name, last_name, avatar_url, email')
+          .eq('id', session.user.id)
+          .single<DatabaseProfile>()
+
+        if (error) {
+          console.error('Profile fetch error:', error)
+          
+          // If profile doesn't exist, create a default one with email
+          console.log('Creating default profile for user')
+          setProfile({
+            first_name: null,
+            last_name: null,
+            avatar_url: null,
+            email: session.user.email || null
+          })
+          
+          // Try to create profile in database
+          const { error: upsertError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: session.user.id,
+              email: session.user.email,
+              updated_at: new Date().toISOString()
+            })
+          
+          if (upsertError) {
+            console.error('Error creating profile:', upsertError)
+          }
+        } else if (data) {
+          console.log('Profile loaded successfully')
+          const profileData: Profile = {
+            first_name: data.first_name,
+            last_name: data.last_name,
+            avatar_url: data.avatar_url,
+            email: data.email,
+          }
+          setProfile(profileData)
+        }
+      } else {
+        console.log('No active session, profile cleared')
+        setProfile(null)
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error)
+      // Fall back to email-only profile if session exists
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user?.email) {
+        setProfile({
+          first_name: null,
+          last_name: null,
+          avatar_url: null,
+          email: session.user.email || null
+        })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleSignOut = async () => {
     try {
       const { error } = await supabase.auth.signOut()
-      if (error) {
-        throw error
-      }
-      // Clear any local storage or state
-      localStorage.clear()
-      sessionStorage.clear()
-      // Redirect to login page
-      router.push('/login')
-      router.refresh() // Force a refresh of the page
-      toast.success('Signed out successfully')
-    } catch (error) {
-      console.error('Error signing out:', error)
-      toast.error('Failed to sign out')
+      if (error) throw error
+      
+      toast.success('Successfully signed out')
+      router.push('/')
+      router.refresh()
+    } catch (error: any) {
+      toast.error(error.message || 'Error signing out')
     }
   }
 
+  const getInitials = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase()
+    }
+    return profile?.email?.[0].toUpperCase() || '?'
+  }
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center">
-        <div className="mr-4 hidden md:flex">
-          <Link href="/" className="mr-6 flex items-center space-x-2">
-            <span className="hidden font-bold sm:inline-block">
-              Gift Registry
-            </span>
-          </Link>
-          <nav className="flex items-center space-x-6 text-sm font-medium">
-            {isAuthenticated && (
-              <>
-                <Link
-                  href="/dashboard"
-                  className={`transition-colors hover:text-foreground/80 ${
-                    pathname === '/dashboard' ? 'text-foreground' : 'text-foreground/60'
-                  }`}
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  href="/create-registry"
-                  className={`transition-colors hover:text-foreground/80 ${
-                    pathname === '/create-registry' ? 'text-foreground' : 'text-foreground/60'
-                  }`}
-                >
-                  Create Registry
-                </Link>
-                <Link
-                  href="/find-registry"
-                  className={`transition-colors hover:text-foreground/80 ${
-                    pathname === '/find-registry' ? 'text-foreground' : 'text-foreground/60'
-                  }`}
-                >
-                  Find Registry
-                </Link>
-                <Link
-                  href="/settings"
-                  className={`transition-colors hover:text-foreground/80 ${
-                    pathname === '/settings' ? 'text-foreground' : 'text-foreground/60'
-                  }`}
-                >
-                  Settings
-                </Link>
-              </>
-            )}
-          </nav>
-        </div>
-        <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
-          {isAuthenticated ? (
-            <Button variant="ghost" onClick={handleSignOut}>
-              Sign Out
-            </Button>
-          ) : (
-            <div className="flex items-center space-x-4">
-              <Link href="/login">
-                <Button variant="ghost">Sign In</Button>
-              </Link>
-              <Link href="/signup">
-                <Button>Sign Up</Button>
-              </Link>
-            </div>
+    <nav className="border-b">
+      <div className="flex h-16 items-center px-4 container mx-auto">
+        <Link href="/" className="font-semibold text-lg">
+          Gift Registry
+        </Link>
+        
+        <div className="ml-auto flex items-center space-x-4">
+          <Button asChild variant="ghost">
+            <Link href="/find-registry">
+              <Search className="h-4 w-4 mr-2" />
+              Find Registry
+            </Link>
+          </Button>
+
+          {!loading && (
+            <>
+              {profile ? (
+                <>
+                  <Button asChild variant="ghost">
+                    <Link href="/create-registry">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Registry
+                    </Link>
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={profile.avatar_url || undefined} />
+                          <AvatarFallback className="bg-primary text-primary-foreground">
+                            {getInitials()}
+                          </AvatarFallback>
+                        </Avatar>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>
+                        {profile.email}
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/dashboard">
+                          <Home className="h-4 w-4 mr-2" />
+                          Dashboard
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/my-registries">
+                          <Gift className="h-4 w-4 mr-2" />
+                          My Registries
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/settings">
+                          <Settings className="h-4 w-4 mr-2" />
+                          Settings
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleSignOut}>
+                        <LogOut className="h-4 w-4 mr-2" />
+                        Sign Out
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : (
+                <>
+                  <Button asChild variant="ghost">
+                    <Link href="/login">
+                      Sign In
+                    </Link>
+                  </Button>
+                  <Button asChild>
+                    <Link href="/signup">
+                      Sign Up
+                    </Link>
+                  </Button>
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
-    </header>
+    </nav>
   )
 } 

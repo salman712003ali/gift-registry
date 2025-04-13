@@ -14,13 +14,11 @@ import { toast } from 'sonner'
 interface UserProfile {
   id: string
   email: string
-  full_name: string
-  avatar_url: string
-  notification_preferences: {
-    email_notifications: boolean
-    contribution_notifications: boolean
-    registry_updates: boolean
-  }
+  first_name: string | null
+  last_name: string | null
+  avatar_url: string | null
+  created_at: string
+  updated_at: string
 }
 
 export default function ProfilePage() {
@@ -29,7 +27,8 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [formData, setFormData] = useState({
-    full_name: '',
+    first_name: '',
+    last_name: '',
     email: '',
     current_password: '',
     new_password: '',
@@ -49,7 +48,7 @@ export default function ProfilePage() {
       }
 
       const { data: profile, error } = await supabase
-        .from('users')
+        .from('profiles')
         .select('*')
         .eq('id', session.user.id)
         .single()
@@ -59,7 +58,8 @@ export default function ProfilePage() {
       setProfile(profile)
       setFormData(prev => ({
         ...prev,
-        full_name: profile.full_name || '',
+        first_name: profile.first_name || '',
+        last_name: profile.last_name || '',
         email: profile.email
       }))
     } catch (error: any) {
@@ -73,9 +73,10 @@ export default function ProfilePage() {
   const handleProfileUpdate = async () => {
     try {
       const { error } = await supabase
-        .from('users')
+        .from('profiles')
         .update({
-          full_name: formData.full_name
+          first_name: formData.first_name,
+          last_name: formData.last_name
         })
         .eq('id', profile?.id)
 
@@ -163,11 +164,20 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="full_name">Full Name</Label>
+                <Label htmlFor="first_name">First Name</Label>
                 <Input
-                  id="full_name"
-                  value={formData.full_name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
+                  id="first_name"
+                  value={formData.first_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="last_name">Last Name</Label>
+                <Input
+                  id="last_name"
+                  value={formData.last_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
                 />
               </div>
 

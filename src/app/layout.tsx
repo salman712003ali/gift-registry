@@ -1,14 +1,14 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import { Nav } from '@/components/nav'
 import { Toaster } from 'sonner'
+import { ThemeProvider } from "@/components/theme-provider"
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
 
 export const metadata: Metadata = {
-  title: 'Gift Registry',
-  description: 'Create and manage gift registries for your special occasions',
+  title: 'GiftRegistry - Share and Manage Wishlists',
+  description: 'Create personalized gift registries, share with friends and family, and track contributions.',
 }
 
 export default function RootLayout({
@@ -17,13 +17,17 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <Nav />
-        <main className="min-h-screen bg-gray-50">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
           {children}
-        </main>
-        <Toaster />
+          <Toaster position="top-right" richColors closeButton />
+        </ThemeProvider>
       </body>
     </html>
   )

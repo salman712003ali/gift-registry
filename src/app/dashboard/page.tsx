@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/utils'
 import { toast } from 'sonner'
+import { Gift, Search, ArrowLeft } from 'lucide-react'
 
 interface Registry {
   id: string
@@ -57,18 +58,22 @@ export default function DashboardPage() {
 
   const fetchDashboardData = async () => {
     try {
+      console.log('Fetching dashboard data...')
       const { data: { session } } = await supabase.auth.getSession()
+      
+      console.log('Session check:', session ? 'authenticated' : 'not authenticated')
+      
       if (!session) {
-        router.push('/login')
+        router.push('/auth/sign-in')
         return
       }
 
-      // Fetch user's registries with gift items and their contributions
+      // Fetch user's registries (no forced inner join)
       const { data: registriesData, error: registriesError } = await supabase
         .from('registries')
         .select(`
           *,
-          gift_items!inner (
+          gift_items (
             id,
             name,
             price,
@@ -79,72 +84,121 @@ export default function DashboardPage() {
         `)
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false })
+      
+      console.log('Registry data fetch result:', registriesError ? 'error' : 'success')
 
-      if (registriesError) throw registriesError
+      if (registriesError) {
+        console.error('Registry fetch error:', registriesError)
+        throw registriesError
+      }
       
       // Safely cast the data to the Registry type
       const safeRegistries = (registriesData || []) as unknown as Registry[];
       setRegistries(safeRegistries)
+      console.log('Registries found:', safeRegistries.length)
 
-      // Fetch recent contributions
+      // Fetch recent contributions using gift_item_id instead of nested selection
       const { data: contributionsData, error: contributionsError } = await supabase
         .from('contributions')
-        .select(`
-          *,
-          gift_items!inner (
-            name,
-            registry_id
-          )
-        `)
+        .select('*')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false })
         .limit(5)
+      
+      console.log('Contributions data fetch result:', contributionsError ? 'error' : 'success')
 
-      if (contributionsError) throw contributionsError
+      if (contributionsError) {
+        console.error('Contributions fetch error:', contributionsError)
+        throw contributionsError
+      }
 
-      // For each contribution, get its registry information
+      // If there are contributions, fetch the related gift items separately
       if (contributionsData && contributionsData.length > 0) {
-        // Get unique registry IDs from contributions
-        const registryIds = Array.from(
-          new Set(
-            contributionsData.map((c: any) => c.gift_items.registry_id as string)
-          )
-        );
+        console.log('Processing contributions:', contributionsData.length)
         
-        const { data: registryData } = await supabase
-          .from('registries')
-          .select('id, title')
-          .in('id', registryIds)
+        // Extract gift item IDs
+        const giftItemIds = contributionsData
+          .filter(c => c.gift_item_id)
+          .map(c => c.gift_item_id);
+        
+        if (giftItemIds.length > 0) {
+          // Fetch gift items
+          const { data: giftItemsData, error: giftItemsError } = await supabase
+            .from('gift_items')
+            .select('id, name, registry_id')
+            .in('id', giftItemIds)
           
-        // Create a map of registry IDs to registry titles
-        const registryMap = new Map<string, string>()
-        if (registryData) {
-          registryData.forEach(registry => {
-            registryMap.set(registry.id as string, registry.title as string)
-          })
-        }
-        
-        // Add registry titles to contributions
-        const enhancedContributions = contributionsData.map((contribution: any) => ({
-          id: contribution.id,
-          amount: contribution.amount,
-          created_at: contribution.created_at,
-          gift_items: {
-            name: contribution.gift_items.name,
-            registry_id: contribution.gift_items.registry_id,
-            registries: {
-              title: registryMap.get(contribution.gift_items.registry_id) || 'Unknown Registry'
-            }
+          if (giftItemsError) {
+            console.error('Gift items fetch error:', giftItemsError)
+            setRecentContributions([])
+            return
           }
-        }));
-        
-        setRecentContributions(enhancedContributions as Contribution[])
+
+          // Create a map of gift item data
+          const giftItemMap = new Map();
+          if (giftItemsData && giftItemsData.length > 0) {
+            giftItemsData.forEach(item => {
+              giftItemMap.set(item.id, item);
+            });
+            
+            // Get unique registry IDs from gift items
+            const registryIds = Array.from(
+              new Set(
+                giftItemsData
+                  .filter(item => item.registry_id)
+                  .map(item => item.registry_id)
+              )
+            );
+            
+            if (registryIds.length > 0) {
+              const { data: registryData } = await supabase
+                .from('registries')
+                .select('id, title')
+                .in('id', registryIds)
+              
+              // Create a map of registry IDs to registry titles
+              const registryMap = new Map<string, string>()
+              if (registryData) {
+                registryData.forEach(registry => {
+                  registryMap.set(registry.id as string, registry.title as string)
+                })
+              }
+              
+              // Combine all the data
+              const enhancedContributions = contributionsData.map(contribution => {
+                const giftItem = giftItemMap.get(contribution.gift_item_id);
+                if (!giftItem) return null;
+                
+                return {
+                  id: contribution.id,
+                  amount: contribution.amount,
+                  created_at: contribution.created_at,
+                  gift_items: {
+                    name: giftItem.name,
+                    registry_id: giftItem.registry_id,
+                    registries: {
+                      title: registryMap.get(giftItem.registry_id) || 'Unknown Registry'
+                    }
+                  }
+                };
+              }).filter(c => c !== null);
+              
+              setRecentContributions(enhancedContributions as Contribution[])
+            } else {
+              setRecentContributions([])
+            }
+          } else {
+            setRecentContributions([])
+          }
+        } else {
+          setRecentContributions([])
+        }
       } else {
         setRecentContributions([])
       }
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error)
-      toast.error(error.message)
+      toast.error('Error loading dashboard data')
     } finally {
       setLoading(false)
     }
@@ -168,12 +222,59 @@ export default function DashboardPage() {
 
   return (
     <div className="container py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <Button asChild>
-          <Link href="/create-registry">Create New Registry</Link>
+      <div className="flex items-center mb-8">
+        <Button
+          variant="outline"
+          size="sm"
+          className="mr-4 gap-1"
+          onClick={() => router.push('/')}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
         </Button>
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <div className="ml-auto flex gap-2">
+          <Button asChild className="button-glow">
+            <Link href="/create-registry">
+              <Gift className="mr-2 h-4 w-4" />
+              Create Registry
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/find-registry">
+              <Search className="mr-2 h-4 w-4" />
+              Find Registry
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Analytics Overview</CardTitle>
+          <CardDescription>Summary of all your registry statistics</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-muted-foreground text-sm">Total Registries</p>
+              <p className="text-2xl font-bold">{registries.length}</p>
+            </div>
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-muted-foreground text-sm">Total Contributions</p>
+              <p className="text-2xl font-bold">{recentContributions.length}</p>
+            </div>
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-muted-foreground text-sm">Avg. Funding</p>
+              <p className="text-2xl font-bold">
+                {registries.length ? 
+                  Math.round(registries.reduce((sum, reg) => sum + calculateRegistryProgress(reg), 0) / registries.length) 
+                  : 0}%
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

@@ -11,7 +11,9 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ContributionsList } from '@/components/contributions-list'
 import { GiftItemForm } from '@/components/gift-item-form'
+import { GiftAnalytics } from '@/components/gift-analytics'
 import { toast } from 'sonner'
+import { ArrowLeft } from 'lucide-react'
 
 interface Registry {
   id: string
@@ -88,8 +90,18 @@ export default function RegistrySettingsPage({ params }: { params: { id: string 
         return
       }
 
-      setRegistry(registry)
-      setPrivacySettings(registry.privacy_settings)
+      // @ts-ignore: Type mismatch on Supabase data
+      setRegistry(registry);
+      
+      // Use a safer approach for privacy settings
+      const settings = registry.privacy_settings || {
+        visibility: 'public',
+        password: '',
+        require_contributor_info: true,
+        show_contributor_names: true,
+        allow_anonymous_contributions: false
+      };
+      setPrivacySettings(settings);
 
       // Fetch gift items
       const { data: items, error: itemsError } = await supabase
@@ -99,7 +111,8 @@ export default function RegistrySettingsPage({ params }: { params: { id: string 
         .order('created_at', { ascending: false })
 
       if (itemsError) throw itemsError
-      setGiftItems(items)
+      // @ts-ignore: Type mismatch on Supabase data
+      setGiftItems(items);
     } catch (error: any) {
       console.error('Error fetching registry:', error)
       toast.error(error.message)
@@ -156,14 +169,25 @@ export default function RegistrySettingsPage({ params }: { params: { id: string 
 
   return (
     <div className="container py-8">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex items-center mb-8">
+        <Button
+          variant="outline"
+          size="sm"
+          className="mr-4 gap-1"
+          onClick={() => router.push(`/registry/${params.id}`)}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Registry
+        </Button>
         <div>
           <h1 className="text-3xl font-bold">{registry.title}</h1>
           <p className="text-muted-foreground">{registry.description}</p>
         </div>
-        <Button variant="destructive" onClick={handleDeleteRegistry}>
-          Delete Registry
-        </Button>
+        <div className="ml-auto">
+          <Button variant="destructive" onClick={handleDeleteRegistry}>
+            Delete Registry
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="privacy" className="space-y-6">
@@ -171,6 +195,7 @@ export default function RegistrySettingsPage({ params }: { params: { id: string 
           <TabsTrigger value="privacy">Privacy Settings</TabsTrigger>
           <TabsTrigger value="gifts">Gift Items</TabsTrigger>
           <TabsTrigger value="contributions">Contributions</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="privacy">
@@ -302,6 +327,20 @@ export default function RegistrySettingsPage({ params }: { params: { id: string 
             </CardHeader>
             <CardContent>
               <ContributionsList registryId={params.id} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="analytics">
+          <Card>
+            <CardHeader>
+              <CardTitle>Registry Analytics</CardTitle>
+              <CardDescription>
+                View detailed analytics about your registry
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <GiftAnalytics registryId={params.id} />
             </CardContent>
           </Card>
         </TabsContent>

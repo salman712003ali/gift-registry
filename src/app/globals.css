@@ -2,12 +2,177 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 26, 83, 92;
-  --background-rgb: 247, 255, 247;
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --primary-50: 214.3 100% 96.9%;
+    --primary-100: 214 95% 93.1%;
+    --primary-200: 213.3 96.9% 87.3%;
+    --primary-300: 212.7 96.7% 78.2%;
+    --primary-400: 213.1 93.9% 67.8%;
+    --primary-500: 217.2 91.2% 59.8%;
+    --primary-600: 221.2 83.2% 53.3%;
+    --primary-700: 224.3 76.3% 48%;
+    --primary-800: 226.4 71.0% 40.4%;
+    --primary-900: 224.4 71.4% 33.1%;
+    --primary-950: 228.5 74.2% 22.2%;
+    --primary-rgb: 37, 99, 235;
+    --secondary: 199 89% 48%;
+    --secondary-foreground: 210 40% 98%;
+    --accent: 41 100% 70%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius-sm: 0.3rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 1rem;
+  }
+ 
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 199 89% 48%;
+    --secondary-foreground: 210 40% 98%;
+    --accent: 41 100% 70%;
+    --accent-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-bold tracking-tight;
+  }
+  h1 {
+    @apply text-4xl md:text-5xl;
+  }
+  h2 {
+    @apply text-3xl md:text-4xl;
+  }
+  h3 {
+    @apply text-2xl md:text-3xl;
+  }
+  h4 {
+    @apply text-xl md:text-2xl;
+  }
+  h5 {
+    @apply text-lg md:text-xl;
+  }
+  h6 {
+    @apply text-base md:text-lg font-semibold;
+  }
+}
+
+@layer components {
+  .container {
+    @apply px-4 mx-auto max-w-7xl sm:px-6 lg:px-8;
+  }
+  
+  .feature-card {
+    @apply rounded-lg border bg-card p-6 shadow-soft transition-all duration-200 hover:shadow-md hover:scale-[1.01];
+  }
+  
+  .glass-card {
+    @apply bg-white/70 dark:bg-black/50 backdrop-blur-lg rounded-lg shadow-soft border border-white/20 dark:border-gray-800/30;
+  }
+  
+  .gradient-heading {
+    @apply bg-clip-text text-transparent bg-feature-gradient font-bold;
+  }
+  
+  .button-glow {
+    @apply hover:shadow-glow transition-shadow duration-300;
+  }
+  
+  .stat-card {
+    @apply rounded-lg border bg-card p-4 shadow-soft flex flex-col;
+  }
+  
+  .stat-value {
+    @apply text-3xl font-bold text-primary;
+  }
+  
+  .stat-label {
+    @apply text-sm text-muted-foreground font-medium;
+  }
+  
+  .dashboard-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4;
+  }
+  
+  .form-group {
+    @apply space-y-2 mb-4;
+  }
+}
+
+/* Custom base styles */
+::selection {
+  @apply bg-primary/30 text-foreground;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
+  overflow-y: scroll;
+}
+
+/* Scroll bar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-primary/30 rounded-full hover:bg-primary/50 transition-colors;
+}
+
+/* Animation helpers */
+.animate-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.hover-scale {
+  @apply transition-transform duration-200 hover:scale-105;
+}
+
+/* Custom utilities */
+.text-balance {
+  text-wrap: balance;
 } 

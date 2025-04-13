@@ -108,7 +108,7 @@ export default function RegistryView() {
       const { data: { user } } = await supabase.auth.getUser()
       const currentUserId = user?.id
 
-      // Fetch gift items with their contributions and comments
+      // Fetch gift items with their contributions
       const { data: itemsData, error: itemsError } = await supabase
         .from('gift_items')
         .select(`
@@ -118,18 +118,36 @@ export default function RegistryView() {
             contributor_name,
             message,
             created_at
-          ),
-          comments!gift_item_id (
-            id,
-            content,
-            user_id,
-            created_at
           )
         `)
         .eq('registry_id', params.id)
         .order('created_at', { ascending: false })
 
       if (itemsError) throw itemsError
+
+      // Fetch comments separately
+      const { data: commentsData } = await supabase
+        .from('comments')
+        .select(`
+          id,
+          content,
+          user_id,
+          created_at,
+          gift_item_id
+        `)
+        .in('gift_item_id', itemsData.map(item => item.id))
+        .order('created_at', { ascending: false })
+
+      // Group comments by gift item ID
+      const commentsByItemId = new Map()
+      if (commentsData) {
+        commentsData.forEach(comment => {
+          if (!commentsByItemId.has(comment.gift_item_id)) {
+            commentsByItemId.set(comment.gift_item_id, [])
+          }
+          commentsByItemId.get(comment.gift_item_id).push(comment)
+        })
+      }
 
       // Fetch favorites separately
       const { data: favoritesData } = await supabase
@@ -140,10 +158,11 @@ export default function RegistryView() {
       // Create a set of favorite item IDs
       const favoriteItemIds = new Set(favoritesData?.map(f => f.gift_item_id) || [])
       
-      // Process items to add is_favorite flag
+      // Process items to add is_favorite flag and comments
       const processedItems = itemsData.map(item => ({
         ...item,
-        is_favorite: favoriteItemIds.has(item.id)
+        is_favorite: favoriteItemIds.has(item.id),
+        comments: commentsByItemId.get(item.id) || []
       }))
       
       // Fetch user profiles for comments

@@ -45,6 +45,13 @@ export function GiftItemDialog({
     try {
       const supabase = createClient()
       
+      // Get the current user
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('You must be logged in to add gift items')
+      }
+      
       // Validate price
       const price = parseFloat(formData.price)
       if (isNaN(price) || price <= 0) {
@@ -61,6 +68,7 @@ export function GiftItemDialog({
         .from('gift_items')
         .insert({
           registry_id: registryId,
+          user_id: session.user.id,
           name: formData.name,
           price: price,
           quantity: quantity,

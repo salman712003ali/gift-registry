@@ -12,11 +12,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 
+interface FormData {
+  title: string;
+  description: string;
+  occasion: string;
+  event_date: string;
+  is_private: boolean;
+  password: string;
+  show_contributor_names: boolean;
+  allow_anonymous_contributions: boolean;
+}
+
 export default function CreateRegistryPage() {
   const router = useRouter()
   const supabase = createClient()
-  const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
+  const [isLoading, setIsLoading] = useState(false)
+  const [formData, setFormData] = useState<FormData>({
     title: '',
     description: '',
     occasion: '',
@@ -35,46 +46,63 @@ export default function CreateRegistryPage() {
     }))
   }
 
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }))
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    setIsLoading(true)
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        router.push('/login')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        toast.error("You must be logged in to create a registry")
         return
       }
 
-      const { data, error } = await supabase
+      // Ensure user exists in the public.users table
+      const { error: userError } = await supabase
+        .rpc('ensure_user_exists', { user_id: user.id })
+
+      if (userError) {
+        console.error('Error ensuring user exists:', userError)
+        toast.error("Failed to create registry. Please try again.")
+        return
+      }
+
+      // Format the event date
+      const formattedDate = formData.event_date ? new Date(formData.event_date).toISOString() : null
+
+      // Create the registry
+      const { data: registry, error: registryError } = await supabase
         .from('registries')
-        .insert({
-          title: formData.title,
-          description: formData.description,
-          occasion: formData.occasion,
-          event_date: formData.event_date,
-          user_id: session.user.id,
-          is_private: formData.is_private
-        })
+        .insert([
+          {
+            title: formData.title,
+            description: formData.description,
+            occasion: formData.occasion,
+            event_date: formattedDate,
+            user_id: user.id,
+            privacy_settings: {
+              is_private: formData.is_private,
+              show_contributor_names: formData.show_contributor_names,
+              allow_anonymous_contributions: formData.allow_anonymous_contributions
+            }
+          }
+        ])
         .select()
         .single()
 
-      if (error) throw error
+      if (registryError) {
+        console.error('Error creating registry:', registryError)
+        toast.error("Failed to create registry. Please try again.")
+        return
+      }
 
-      toast.success('Registry created successfully!')
-      router.push(`/registry/${data.id}`)
-    } catch (error: any) {
-      console.error('Error creating registry:', error)
-      toast.error(error.message)
+      toast.success("Registry created successfully!")
+      router.push(`/registry/${registry.id}`)
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error("An unexpected error occurred. Please try again.")
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
@@ -121,38 +149,35 @@ export default function CreateRegistryPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="occasion">Occasion</Label>
-                  <Select
-                    value={formData.occasion}
-                    onValueChange={(value) => handleSelectChange('occasion', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an occasion" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Wedding">Wedding</SelectItem>
-                      <SelectItem value="Birthday">Birthday</SelectItem>
-                      <SelectItem value="Anniversary">Anniversary</SelectItem>
-                      <SelectItem value="Housewarming">Housewarming</SelectItem>
-                      <SelectItem value="Baby Shower">Baby Shower</SelectItem>
-                      <SelectItem value="Graduation">Graduation</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="occasion">Occasion</Label>
+                <Select
+                  value={formData.occasion}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, occasion: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an occasion" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="wedding">Wedding</SelectItem>
+                    <SelectItem value="birthday">Birthday</SelectItem>
+                    <SelectItem value="baby_shower">Baby Shower</SelectItem>
+                    <SelectItem value="housewarming">Housewarming</SelectItem>
+                    <SelectItem value="holiday">Holiday</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="event_date">Event Date</Label>
-                  <Input
-                    id="event_date"
-                    name="event_date"
-                    type="date"
-                    value={formData.event_date}
-                    onChange={handleChange}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="event_date">Event Date</Label>
+                <Input
+                  id="event_date"
+                  name="event_date"
+                  type="date"
+                  value={formData.event_date}
+                  onChange={handleChange}
+                />
               </div>
 
               <div className="space-y-2">
@@ -225,8 +250,8 @@ export default function CreateRegistryPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? 'Creating...' : 'Create Registry'}
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? 'Creating...' : 'Create Registry'}
               </Button>
             </CardFooter>
           </form>

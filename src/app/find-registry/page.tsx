@@ -26,7 +26,11 @@ interface Registry {
   event_date: string;
   created_at: string;
   user_id: string;
-  is_private: boolean;
+  privacy_settings: {
+    is_private: boolean;
+    show_contributor_names: boolean;
+    allow_anonymous_contributions: boolean;
+  };
   users?: {
     full_name: string | null;
   };
@@ -59,11 +63,17 @@ export default function FindRegistryPage() {
       const { data, error } = await supabase
         .from('registries')
         .select('occasion')
-        .eq('is_private', false)
+        .filter('privacy_settings->is_private', 'eq', false)
         .not('occasion', 'is', null);
 
       if (!error && data) {
-        const uniqueOccasions = Array.from(new Set(data.map(r => r.occasion))).filter(Boolean);
+        const uniqueOccasions = Array.from(
+          new Set(
+            data
+              .map(r => r.occasion as string)
+              .filter(Boolean)
+          )
+        );
         setOccasions(uniqueOccasions);
       }
     };
@@ -76,7 +86,7 @@ export default function FindRegistryPage() {
       let query = supabase
         .from('registries')
         .select('*, users(full_name)')
-        .eq('is_private', false);
+        .filter('privacy_settings->is_private', 'eq', false);
 
       if (term) {
         query = query.or(
@@ -114,7 +124,9 @@ export default function FindRegistryPage() {
 
       if (error) throw error;
 
-      setRegistries(data || []);
+      // Cast the data to the Registry type
+      const typedData = (data || []) as unknown as Registry[];
+      setRegistries(typedData);
     } catch (error: any) {
       console.error('Error searching registries:', error);
       toast.error(error.message || 'Failed to search registries');

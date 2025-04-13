@@ -15,8 +15,12 @@ interface Registry {
   description: string
   occasion: string
   event_date: string
-  is_private: boolean
   created_at: string
+  privacy_settings: {
+    is_private: boolean
+    show_contributor_names: boolean
+    allow_anonymous_contributions: boolean
+  }
   gift_items: {
     id: string
     name: string
@@ -33,7 +37,8 @@ interface Contribution {
   created_at: string
   gift_items: {
     name: string
-    registries: {
+    registry_id: string
+    registries?: {
       title: string
     }
   }
@@ -59,11 +64,11 @@ export default function DashboardPage() {
       }
 
       // Fetch user's registries with gift items and their contributions
-      const { data: registries, error: registriesError } = await supabase
+      const { data: registriesData, error: registriesError } = await supabase
         .from('registries')
         .select(`
           *,
-          gift_items (
+          gift_items!inner (
             id,
             name,
             price,
@@ -76,18 +81,19 @@ export default function DashboardPage() {
         .order('created_at', { ascending: false })
 
       if (registriesError) throw registriesError
-      setRegistries(registries)
+      
+      // Safely cast the data to the Registry type
+      const safeRegistries = (registriesData || []) as unknown as Registry[];
+      setRegistries(safeRegistries)
 
       // Fetch recent contributions
-      const { data: contributions, error: contributionsError } = await supabase
+      const { data: contributionsData, error: contributionsError } = await supabase
         .from('contributions')
         .select(`
           *,
-          gift_items (
+          gift_items!inner (
             name,
-            registries (
-              title
-            )
+            registry_id
           )
         `)
         .eq('user_id', session.user.id)
@@ -95,7 +101,47 @@ export default function DashboardPage() {
         .limit(5)
 
       if (contributionsError) throw contributionsError
-      setRecentContributions(contributions)
+
+      // For each contribution, get its registry information
+      if (contributionsData && contributionsData.length > 0) {
+        // Get unique registry IDs from contributions
+        const registryIds = Array.from(
+          new Set(
+            contributionsData.map((c: any) => c.gift_items.registry_id as string)
+          )
+        );
+        
+        const { data: registryData } = await supabase
+          .from('registries')
+          .select('id, title')
+          .in('id', registryIds)
+          
+        // Create a map of registry IDs to registry titles
+        const registryMap = new Map<string, string>()
+        if (registryData) {
+          registryData.forEach(registry => {
+            registryMap.set(registry.id as string, registry.title as string)
+          })
+        }
+        
+        // Add registry titles to contributions
+        const enhancedContributions = contributionsData.map((contribution: any) => ({
+          id: contribution.id,
+          amount: contribution.amount,
+          created_at: contribution.created_at,
+          gift_items: {
+            name: contribution.gift_items.name,
+            registry_id: contribution.gift_items.registry_id,
+            registries: {
+              title: registryMap.get(contribution.gift_items.registry_id) || 'Unknown Registry'
+            }
+          }
+        }));
+        
+        setRecentContributions(enhancedContributions as Contribution[])
+      } else {
+        setRecentContributions([])
+      }
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error)
       toast.error(error.message)
@@ -197,7 +243,7 @@ export default function DashboardPage() {
                     <div>
                       <p className="font-medium">{contribution.gift_items.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {contribution.gift_items.registries.title}
+                        {contribution.gift_items.registries?.title || 'Unknown Registry'}
                       </p>
                       <p className="text-sm">
                         {new Date(contribution.created_at).toLocaleDateString()}

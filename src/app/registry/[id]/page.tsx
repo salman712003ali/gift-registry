@@ -16,7 +16,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Heart, Share2, MessageSquare, ShoppingCart, ArrowLeft } from 'lucide-react'
-import { RegistryAnalytics } from '@/components/registry-analytics'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ProductSearch } from '@/components/product-search/product-search'
+import { AddItemForm } from '@/components/add-item-form'
 
 interface Profile {
   first_name: string;
@@ -117,6 +120,7 @@ export default function RegistryView() {
   const [sortBy, setSortBy] = useState('newest')
   const [filterBy, setFilterBy] = useState('all')
   const [contributionsRefreshKey, setContributionsRefreshKey] = useState(0)
+  const [showSharePopup, setShowSharePopup] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -151,7 +155,7 @@ export default function RegistryView() {
       const { data: { user } } = await supabase.auth.getUser()
       const currentUserId = user?.id
 
-      // Fetch gift items with their contributions and contributor profiles
+      // Fetch gift items with their contributions
       const { data: itemsData, error: itemsError } = await supabase
         .from('gift_items')
         .select(`
@@ -166,15 +170,19 @@ export default function RegistryView() {
           updated_at,
           user_id,
           is_purchased,
-          contributions!left (
+          contributions (
             id,
             amount,
             message,
             created_at,
             user_id,
-            profiles!left (
+            contributor_name,
+            profiles (
+              id,
               first_name,
-              last_name
+              last_name,
+              full_name,
+              email
             )
           )
         `)
@@ -189,13 +197,15 @@ export default function RegistryView() {
         ...item,
         contributions: (item.contributions || []).map((contribution: any) => ({
           ...contribution,
-          contributor_name: contribution.profiles 
-            ? `${contribution.profiles.first_name} ${contribution.profiles.last_name}`.trim() || 'Anonymous'
-            : 'Anonymous'
+          contributor_name: contribution.contributor_name || 
+            (contribution.profiles ? (
+              contribution.profiles.full_name ||
+              `${contribution.profiles.first_name || ''} ${contribution.profiles.last_name || ''}`.trim() ||
+              contribution.profiles.email ||
+              'Anonymous'
+            ) : 'Anonymous')
         }))
       })) as GiftItem[]
-
-      setGiftItems(processedItems)
 
       // Fetch comments separately
       const { data: commentsData } = await supabase
@@ -235,8 +245,12 @@ export default function RegistryView() {
           .select('gift_item_id')
           .eq('user_id', currentUserId)
 
-        // Create a set of favorite item IDs
-        favoriteItemIds = new Set(favoritesData?.map(f => f.gift_item_id) || [])
+        // Create a set of favorite item IDs with proper type casting
+        favoriteItemIds = new Set(
+          (favoritesData || [])
+            .map(f => f.gift_item_id)
+            .filter((id): id is string => typeof id === 'string')
+        )
       }
       
       // Process items to add is_favorite flag and comments
@@ -245,40 +259,8 @@ export default function RegistryView() {
         is_favorite: favoriteItemIds.has(item.id),
         comments: commentsByItemId.get(item.id) || []
       })) as GiftItem[]
-      
-      // Fetch user profiles for comments
-      const userIds = new Set<string>(
-        itemsWithProfiles.flatMap(item => 
-          (item.comments || []).map(comment => comment.user_id as string)
-        ).filter(Boolean)
-      )
-      
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url')
-        .in('id', Array.from(userIds))
-      
-      // Create a map of user IDs to profiles
-      const profilesMap = new Map()
-      profilesData?.forEach(profile => {
-        profilesMap.set(profile.id, profile)
-      })
-      
-      // Add profile information to comments
-      const itemsWithProfilesAndProfiles = itemsWithProfiles.map(item => {
-        if (item.comments) {
-          return {
-            ...item,
-            comments: item.comments.map((comment: { user_id: string }) => ({
-              ...comment,
-              profile: profilesMap.get(comment.user_id) || { full_name: 'Anonymous', avatar_url: null }
-            }))
-          }
-        }
-        return item
-      }) as GiftItem[]
-      
-      setGiftItems(itemsWithProfilesAndProfiles)
+
+      setGiftItems(itemsWithProfiles)
 
       // Generate QR code
       const registryUrl = `${window.location.origin}/registry/${params.id}`
@@ -318,9 +300,8 @@ export default function RegistryView() {
         url
       })
     } catch (error) {
-      // If Web Share API is not supported, copy to clipboard
-      await navigator.clipboard.writeText(url)
-      toast.success('Registry link copied to clipboard!')
+      // If Web Share API is not supported, show social share popup
+      setShowSharePopup(true)
     }
   }
 
@@ -421,6 +402,41 @@ export default function RegistryView() {
     }
   }
 
+  const shareToWhatsApp = () => {
+    const url = `${window.location.origin}/registry/${params.id}`
+    const encodedText = encodeURIComponent(`Check out my gift registry: ${registry?.title}\n${url}`)
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank')
+    setShowSharePopup(false)
+  }
+
+  const shareToFacebook = () => {
+    const url = `${window.location.origin}/registry/${params.id}`
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank')
+    setShowSharePopup(false)
+  }
+
+  const shareToTwitter = () => {
+    const url = `${window.location.origin}/registry/${params.id}`
+    const text = `Check out my gift registry: ${registry?.title}`
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank')
+    setShowSharePopup(false)
+  }
+
+  const shareToEmail = () => {
+    const url = `${window.location.origin}/registry/${params.id}`
+    const subject = encodeURIComponent(`${registry?.title} - Gift Registry`)
+    const body = encodeURIComponent(`Check out my gift registry: ${registry?.title}\n${url}`)
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_blank')
+    setShowSharePopup(false)
+  }
+
+  const copyToClipboard = async () => {
+    const url = `${window.location.origin}/registry/${params.id}`
+    await navigator.clipboard.writeText(url)
+    toast.success('Registry link copied to clipboard!')
+    setShowSharePopup(false)
+  }
+
   if (loading) {
     return <div className="container mx-auto p-4">Loading...</div>
   }
@@ -430,7 +446,7 @@ export default function RegistryView() {
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto py-8 px-4">
       <div className="flex items-center mb-6">
         <Button
           variant="outline"
@@ -470,7 +486,6 @@ export default function RegistryView() {
           <TabsTrigger value="items">Gift Items</TabsTrigger>
           <TabsTrigger value="contributions">Contributions</TabsTrigger>
           <TabsTrigger value="share">Share</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="items">
@@ -622,20 +637,69 @@ export default function RegistryView() {
                       <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48" />
                     </div>
                     <Button variant="outline" onClick={handleShare}>
-                      Copy Link
+                      <Share2 className="h-4 w-4 mr-2" />
+                      Share Registry
                     </Button>
+                    
+                    <div className="grid grid-cols-5 gap-4 w-full max-w-md mt-4">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="h-12 w-12 rounded-full bg-green-50 hover:bg-green-100 border-green-200"
+                        onClick={shareToWhatsApp}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-6 w-6 text-green-600">
+                          <path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.652a11.882 11.882 0 005.71 1.447h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                        </svg>
+                      </Button>
+                      
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="h-12 w-12 rounded-full bg-blue-50 hover:bg-blue-100 border-blue-200"
+                        onClick={shareToFacebook}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-6 w-6 text-blue-600">
+                          <path fill="currentColor" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                        </svg>
+                      </Button>
+                      
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="h-12 w-12 rounded-full bg-blue-50 hover:bg-blue-100 border-blue-200"
+                        onClick={shareToTwitter}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-6 w-6 text-blue-400">
+                          <path fill="currentColor" d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z" />
+                        </svg>
+                      </Button>
+                      
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="h-12 w-12 rounded-full bg-red-50 hover:bg-red-100 border-red-200"
+                        onClick={shareToEmail}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-6 w-6 text-red-500">
+                          <path fill="currentColor" d="M12 12.713l-11.985-9.713h23.97l-11.985 9.713zm0 2.574l-12-9.725v15.438h24v-15.438l-12 9.725z" />
+                        </svg>
+                      </Button>
+                      
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="h-12 w-12 rounded-full"
+                        onClick={copyToClipboard}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-6 w-6">
+                          <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                        </svg>
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="analytics">
-          <div className="space-y-8">
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Registry Analytics</h2>
-              <RegistryAnalytics registryId={params.id} refreshKey={contributionsRefreshKey} />
             </div>
           </div>
         </TabsContent>
@@ -668,6 +732,107 @@ export default function RegistryView() {
           </Card>
         </div>
       )}
+
+      {showSharePopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Share Registry</CardTitle>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="absolute right-2 top-2" 
+                onClick={() => setShowSharePopup(false)}
+              >
+                ✕
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-4 gap-4 mb-4">
+                <Button 
+                  variant="outline" 
+                  className="flex flex-col items-center gap-2 h-auto py-4"
+                  onClick={shareToWhatsApp}
+                >
+                  <svg viewBox="0 0 24 24" className="h-6 w-6 text-green-600">
+                    <path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.652a11.882 11.882 0 005.71 1.447h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                  </svg>
+                  <span className="text-xs">WhatsApp</span>
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  className="flex flex-col items-center gap-2 h-auto py-4"
+                  onClick={shareToFacebook}
+                >
+                  <svg viewBox="0 0 24 24" className="h-6 w-6 text-blue-600">
+                    <path fill="currentColor" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                  </svg>
+                  <span className="text-xs">Facebook</span>
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  className="flex flex-col items-center gap-2 h-auto py-4"
+                  onClick={shareToTwitter}
+                >
+                  <svg viewBox="0 0 24 24" className="h-6 w-6 text-blue-400">
+                    <path fill="currentColor" d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z" />
+                  </svg>
+                  <span className="text-xs">Twitter</span>
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  className="flex flex-col items-center gap-2 h-auto py-4"
+                  onClick={shareToEmail}
+                >
+                  <svg viewBox="0 0 24 24" className="h-6 w-6 text-red-500">
+                    <path fill="currentColor" d="M12 12.713l-11.985-9.713h23.97l-11.985 9.713zm0 2.574l-12-9.725v15.438h24v-15.438l-12 9.725z" />
+                  </svg>
+                  <span className="text-xs">Email</span>
+                </Button>
+              </div>
+              
+              <div className="flex items-center space-x-2 border rounded-md p-2">
+                <div className="truncate flex-1 text-sm bg-muted/50 p-2 rounded">
+                  {`${window.location.origin}/registry/${params.id}`}
+                </div>
+                <Button variant="secondary" size="sm" onClick={copyToClipboard}>
+                  Copy
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold mb-4">Add Items to Your Registry</h2>
+        <Tabs defaultValue="search" className="w-full">
+          <TabsList>
+            <TabsTrigger value="search">Search Products</TabsTrigger>
+            <TabsTrigger value="manual">Add Manually</TabsTrigger>
+          </TabsList>
+          <TabsContent value="search">
+            <ProductSearch
+              registryId={params.id}
+              onProductSelect={(product) => {
+                // Refresh the items list after adding a product
+                fetchRegistry()
+              }}
+            />
+          </TabsContent>
+          <TabsContent value="manual">
+            <AddItemForm
+              registryId={params.id}
+              onItemAdded={() => {
+                fetchRegistry()
+              }}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   )
 } 

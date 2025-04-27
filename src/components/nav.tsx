@@ -15,7 +15,7 @@ import {
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
-import { Menu, Bell, LogOut, User, Settings, Home, Gift, Search, Plus } from 'lucide-react'
+import { Menu, Bell, LogOut, User, Settings, Home, Gift, Search, Plus, ChevronDown } from 'lucide-react'
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import {
   Sheet,
@@ -183,20 +183,34 @@ export function Nav() {
                       Create Registry
                     </Link>
                   </Button>
+                  
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                        <Avatar className="h-8 w-8">
+                      <Button variant="outline" className="flex items-center gap-2">
+                        <Avatar className="h-6 w-6">
                           <AvatarImage src={profile.avatar_url || undefined} />
-                          <AvatarFallback className="bg-primary text-primary-foreground">
+                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                             {getInitials()}
                           </AvatarFallback>
                         </Avatar>
+                        <span className="max-w-[100px] truncate">
+                          {profile.first_name || profile.email?.split('@')[0] || 'Profile'}
+                        </span>
+                        <ChevronDown className="h-4 w-4 ml-1" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" className="w-56">
                       <DropdownMenuLabel>
-                        {profile.email}
+                        <div className="flex flex-col">
+                          <span className="font-medium">
+                            {profile.first_name && profile.last_name 
+                              ? `${profile.first_name} ${profile.last_name}`
+                              : 'My Account'}
+                          </span>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {profile.email}
+                          </span>
+                        </div>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
@@ -214,11 +228,14 @@ export function Nav() {
                       <DropdownMenuItem asChild>
                         <Link href="/settings">
                           <Settings className="h-4 w-4 mr-2" />
-                          Settings
+                          Account Settings
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handleSignOut}>
+                      <DropdownMenuItem 
+                        onClick={handleSignOut} 
+                        className="text-red-500 focus:text-red-500 cursor-pointer"
+                      >
                         <LogOut className="h-4 w-4 mr-2" />
                         Sign Out
                       </DropdownMenuItem>

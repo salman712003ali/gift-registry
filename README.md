@@ -1,27 +1,36 @@
-# Gift Registry Platform
+# Gift Registry
 
-A modern gift registry platform that allows users to create and manage gift registries for special occasions.
+A modern gift registry platform that helps you create and share wishlists for any occasion.
 
 ## Features
 
-- Create and manage gift registries
-- Add gift items with prices and quantities
-- Share registries via QR codes and links
-- Group gifting and contributions
-- Privacy settings for registries
-- Email notifications for contributions
-- User settings and preferences
+- 🎁 Create multiple gift registries for different occasions
+- 👥 Share registries with friends and family
+- 💝 Add items from major retailers or custom items
+- 💰 Track contributions and purchases
+- 🔒 Privacy controls for your registries
+- 📱 Mobile-friendly design
+- ✨ Real-time updates
+- 🤝 Group gifting support
 
 ## Tech Stack
 
-- Next.js 14
-- TypeScript
-- Tailwind CSS
-- Supabase (Auth, Database, Storage)
-- Radix UI
-- Sonner (Toasts)
+- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
+- **Backend**: Supabase (PostgreSQL, Auth, Storage)
+- **Deployment**: Vercel
+- **UI Components**: shadcn/ui
+- **State Management**: React Query
+- **Authentication**: Supabase Auth
 
-## Setup
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+ 
+- npm or yarn
+- Supabase account
+
+### Local Development
 
 1. Clone the repository:
    ```bash
@@ -32,53 +41,58 @@ A modern gift registry platform that allows users to create and manage gift regi
 2. Install dependencies:
    ```bash
    npm install
+   # or
+   yarn install
    ```
 
-3. Set up environment variables:
-   Create a `.env.local` file in the root directory with the following variables:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+3. Copy the example environment file:
+   ```bash
+   cp .env.example .env.local
    ```
 
-4. Set up Supabase:
-   - Create a new Supabase project
-   - Run the migrations in the `supabase/migrations` directory
-   - Enable email auth in Supabase
-   - Set up the email service in Supabase
+4. Update the environment variables in `.env.local` with your Supabase project details.
 
-5. Start the development server:
+5. Run the development server:
    ```bash
    npm run dev
+   # or
+   yarn dev
    ```
 
-## Database Schema
+6. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-The application uses the following tables:
+### Deployment
 
-- `users`: User profiles and preferences
-- `registries`: Gift registries
-- `gift_items`: Items in registries
-- `contributions`: Contributions to gift items
+The easiest way to deploy your Gift Registry is to use [Vercel](https://vercel.com):
 
-## Deployment
+1. Push your code to a GitHub repository
+2. Import your project to Vercel
+3. Add your environment variables
+4. Deploy!
 
-The application can be deployed to Vercel:
-
-1. Push your code to GitHub
-2. Create a new project in Vercel
-3. Connect your GitHub repository
-4. Add environment variables
-5. Deploy
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/gift-registry)
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+If you need help or have questions:
+- Open an issue
+- Join our Discord community
+- Email support@giftregistry.com
+
+## Roadmap
+
+- [ ] Mobile app
+- [ ] Advanced analytics
+- [ ] More retailer integrations
+- [ ] Gift recommendations
+- [ ] Thank you card management
+- [ ] Price tracking
+- [ ] Stock notifications 

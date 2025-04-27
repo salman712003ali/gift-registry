@@ -3,23 +3,34 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/utils'
+import { createClient } from '@/utils/supabase/client'
+import { Database } from '@/types/supabase'
 
-interface Contribution {
+type Tables = Database['public']['Tables']
+type ContributionRow = Tables['contributions']['Row']
+type ProfileRow = Tables['profiles']['Row']
+
+interface Profile {
+  id: string
+  first_name?: string | null
+  last_name?: string | null
+  full_name?: string | null
+  email?: string | null
+}
+
+interface RawContribution {
   id: string
   amount: number
-  message?: string
+  message?: string | null
   created_at: string
-  contributor_name?: string
-  profiles?: {
-    id?: string
-    first_name?: string
-    last_name?: string
-    full_name?: string
-    email?: string
-  }
-  users?: {
-    full_name: string | null
-  }
+  contributor_name?: string | null
+  user_id?: string | null
+  profile_id?: string | null
+  profiles?: Profile | null
+}
+
+interface Contribution extends RawContribution {
+  formatted_name: string
 }
 
 interface ContributionsListProps {
@@ -33,38 +44,89 @@ export function ContributionsList({ giftItemId, registryId, refreshKey = 0 }: Co
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<{total: number, count: number}>({ total: 0, count: 0 })
+  const supabase = createClient()
 
   const fetchContributions = async () => {
     try {
-      const params = new URLSearchParams()
-      if (giftItemId) params.append('gift_item_id', giftItemId)
-      if (registryId) params.append('registry_id', registryId)
+      setLoading(true)
+      console.log('Fetching contributions for:', { giftItemId, registryId })
+      
+      // First fetch contributions with profiles
+      let query = supabase
+        .from('contributions')
+        .select(`
+          id,
+          amount,
+          message,
+          created_at,
+          contributor_name,
+          user_id,
+          profile_id,
+          profiles (
+            id,
+            first_name,
+            last_name,
+            full_name,
+            email
+          )
+        `)
+        .order('created_at', { ascending: false })
 
-      console.log('Fetching contributions with params:', params.toString());
-      const response = await fetch(`/api/contributions?${params.toString()}`)
-      const data = await response.json()
-
-      if (!response.ok) {
-        console.error('API error response:', data);
-        throw new Error(data.error || 'Failed to fetch contributions')
+      if (giftItemId) {
+        query = query.eq('gift_item_id', giftItemId)
+      }
+      if (registryId) {
+        query = query.eq('registry_id', registryId)
       }
 
-      console.log('Contributions data:', data);
-      
+      const { data: contributionsData, error: fetchError } = await query
+
+      if (fetchError) throw fetchError
+
+      console.log('Raw contributions data:', contributionsData)
+
+      if (!contributionsData || !Array.isArray(contributionsData)) {
+        throw new Error('No contributions found')
+      }
+
+      // Process contributions with profile data
+      const processedContributions: Contribution[] = contributionsData.map((contribution: RawContribution) => {
+        const profile = contribution.profiles
+        const formatted_name = contribution.contributor_name || 
+          (profile ? (
+            profile.full_name ||
+            `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
+            profile.email ||
+            'Anonymous'
+          ) : 'Anonymous')
+
+        return {
+          ...contribution,
+          formatted_name
+        }
+      })
+
+      console.log('Processed contributions:', processedContributions)
+
       // Calculate stats
-      if (Array.isArray(data)) {
-        const totalAmount = data.reduce((sum, contribution) => sum + (contribution.amount || 0), 0);
-        setStats({
-          total: totalAmount,
-          count: data.length
-        });
-      }
-      
-      setContributions(data)
+      const totalAmount = processedContributions.reduce((sum, contribution) => {
+        return sum + contribution.amount
+      }, 0)
+
+      const uniqueContributors = new Set(
+        processedContributions.map(c => c.profile_id || c.contributor_name || 'anonymous')
+      ).size
+
+      setStats({
+        total: totalAmount,
+        count: uniqueContributors
+      })
+
+      setContributions(processedContributions)
       setError(null)
-    } catch (error: any) {
-      console.error('Error fetching contributions:', error)
-      setError(error.message || 'Failed to fetch contributions')
+    } catch (err: any) {
+      console.error('Error fetching contributions:', err)
+      setError(err.message || 'Failed to fetch contributions')
     } finally {
       setLoading(false)
     }
@@ -131,13 +193,7 @@ export function ContributionsList({ giftItemId, registryId, refreshKey = 0 }: Co
             <div className="flex justify-between items-start">
               <div>
                 <p className="font-medium">
-                  {contribution.contributor_name || 
-                   (contribution.profiles ? (
-                      (contribution.profiles.full_name) || 
-                      `${contribution.profiles.first_name || ''} ${contribution.profiles.last_name || ''}`.trim() ||
-                      contribution.profiles.email ||
-                      'Anonymous'
-                   ) : 'Anonymous')}
+                  {contribution.formatted_name}
                 </p>
                 <p className="text-muted-foreground text-sm">
                   {new Date(contribution.created_at).toLocaleDateString()}
@@ -155,4 +211,4 @@ export function ContributionsList({ giftItemId, registryId, refreshKey = 0 }: Co
       </div>
     </div>
   )
-} 
+}

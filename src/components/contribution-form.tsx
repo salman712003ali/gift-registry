@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
+import { Session } from '@supabase/supabase-js'
 
 interface ContributionFormProps {
   giftItemId: string
@@ -25,11 +26,28 @@ export function ContributionForm({
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
+  const [session, setSession] = useState<Session | null>(null)
   const [formData, setFormData] = useState({
     amount: '',
     name: '',
     message: ''
   })
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+    })
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -51,25 +69,68 @@ export function ContributionForm({
         return
       }
 
-      // Get current user's session
-      const { data: { session } } = await supabase.auth.getSession()
+      console.log('Starting contribution submission...', {
+        amount,
+        giftItemId,
+        registryId,
+        isAnonymous
+      })
 
-      // If user is logged in, use their ID
-      // If anonymous or not logged in, don't set user_id
+      // Get user's profile if authenticated
+      let profile = null
+      if (session?.user) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+        
+        if (profileError) {
+          console.error('Error fetching profile:', profileError)
+          throw new Error('Failed to fetch user profile')
+        }
+        
+        profile = profileData
+        console.log('Fetched profile:', profile)
+      }
+
+      // Prepare contribution data
       const contributionData = {
         gift_item_id: giftItemId,
+        registry_id: registryId,
         amount: amount,
         message: formData.message || null,
         created_at: new Date().toISOString(),
-        user_id: isAnonymous ? null : (session?.user?.id || null)
+        user_id: isAnonymous ? null : session?.user?.id || null,
+        profile_id: isAnonymous ? null : session?.user?.id || null,
+        contributor_name: isAnonymous 
+          ? 'Anonymous' 
+          : session?.user
+            ? (profile?.full_name || 
+               `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 
+               session.user.email || 
+               'Anonymous')
+            : (formData.name || 'Anonymous'),
+        is_anonymous: isAnonymous
       }
 
+      console.log('Contributing as:', contributionData.contributor_name)
+      console.log('Is anonymous:', isAnonymous)
+      console.log('Has session:', !!session?.user)
+
       // Create the contribution
-      const { error } = await supabase
+      const { data: newContribution, error } = await supabase
         .from('contributions')
         .insert(contributionData)
+        .select()
+        .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('Supabase error:', error)
+        throw error
+      }
+
+      console.log('Contribution created successfully:', newContribution)
 
       toast.success('Contribution added successfully')
       
@@ -131,6 +192,21 @@ export function ContributionForm({
           rows={3}
         />
       </div>
+
+      {!isAnonymous && !session?.user && (
+        <div className="space-y-2">
+          <Label htmlFor="name">Your Name</Label>
+          <Input
+            id="name"
+            name="name"
+            type="text"
+            value={formData.name}
+            onChange={handleChange}
+            placeholder="Enter your name"
+            required={!isAnonymous}
+          />
+        </div>
+      )}
 
       <div className="flex justify-end space-x-2 pt-4">
         {onCancel && (

@@ -1,50 +1,87 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders } from '../_shared/cors.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+interface EmailPayload {
+  to: string
+  subject: string
+  content: string
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
+  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { to, subject, text } = await req.json()
+    const { to, subject, content } = await req.json() as EmailPayload
 
-    // Initialize Supabase client
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    // Validate input
+    if (!to || !subject || !content) {
+      throw new Error('Missing required fields')
+    }
 
-    // Send email using Supabase's built-in email service
-    const { error } = await supabase.functions.invoke('send-email', {
-      body: {
-        to,
-        subject,
-        text,
+    // Initialize SendGrid
+    const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY')
+    if (!SENDGRID_API_KEY) {
+      throw new Error('Missing SendGrid API key')
+    }
+
+    // Send email using SendGrid
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+        'Content-Type': 'application/json'
       },
+      body: JSON.stringify({
+        personalizations: [
+          {
+            to: [{ email: to }]
+          }
+        ],
+        from: {
+          email: 'noreply@giftregistry.com',
+          name: 'Gift Registry'
+        },
+        subject: subject,
+        content: [
+          {
+            type: 'text/html',
+            value: content
+          }
+        ]
+      })
     })
 
-    if (error) throw error
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(`SendGrid error: ${JSON.stringify(error)}`)
+    }
 
     return new Response(
       JSON.stringify({ success: true }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+        status: 200
       }
     )
   } catch (error) {
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({
+        success: false,
+        error: error.message
+      }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+        status: 400
       }
     )
   }

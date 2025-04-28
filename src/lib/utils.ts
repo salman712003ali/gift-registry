@@ -10,4 +10,22 @@ export function formatCurrency(amount: number): string {
     style: 'currency',
     currency: 'USD'
   }).format(amount)
+}
+
+// Custom debounce function to replace lodash/debounce
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
+  
+  return function(...args: Parameters<T>) {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    
+    timeout = setTimeout(() => {
+      func(...args);
+    }, wait);
+  };
 } 

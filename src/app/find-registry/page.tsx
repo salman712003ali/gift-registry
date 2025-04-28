@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import debounce from "lodash/debounce";
+import { debounce } from "@/lib/utils";
 import { ArrowLeft, Search } from 'lucide-react'
 
 interface Registry {

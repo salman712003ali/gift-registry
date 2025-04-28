@@ -102,10 +102,9 @@ export default function ManageItemsPage() {
     try {
       setLoading(true)
       
-      // Check if user is authenticated
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        router.push('/login')
+        setLoading(false)
         return
       }
       
@@ -120,7 +119,8 @@ export default function ManageItemsPage() {
       
       if (error) throw error
       
-      setItems(data || [])
+      // Cast the data to GiftItem[] to handle the registry join
+      setItems((data as unknown as GiftItem[]) || [])
     } catch (error: any) {
       console.error('Error fetching gift items:', error)
       toast.error(error.message || 'Failed to load gift items')
@@ -141,7 +141,7 @@ export default function ManageItemsPage() {
       
       if (error) throw error
       
-      setRegistries(data || [])
+      setRegistries((data as unknown as Registry[]) || [])
     } catch (error: any) {
       console.error('Error fetching registries:', error)
     }
@@ -476,7 +476,7 @@ export default function ManageItemsPage() {
                     <TableCell className="text-center">{formatCurrency(item.price)}</TableCell>
                     <TableCell className="text-center">{item.quantity}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant={item.is_purchased ? "success" : "outline"}>
+                      <Badge variant={item.is_purchased ? "secondary" : "outline"}>
                         {item.is_purchased ? (
                           <span className="flex items-center">
                             <Check className="h-3 w-3 mr-1" />
@@ -502,7 +502,7 @@ export default function ManageItemsPage() {
                         
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="sm">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>

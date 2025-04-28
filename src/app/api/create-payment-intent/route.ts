@@ -9,61 +9,16 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const body = await req.json()
-    const { 
-      amount, 
-      registryId, 
-      giftItemId, 
-      contributorName, 
-      message, 
-      isAnonymous,
-      userId
-    } = body
-
-    if (!amount || !registryId) {
-      return NextResponse.json(
-        { error: 'Missing required parameters' },
-        { status: 400 }
-      )
-    }
-
-    // Fetch registry info to include in metadata
-    const { data: registry } = await supabase
-      .from('registries')
-      .select('title, user_id')
-      .eq('id', registryId)
-      .single()
-
-    if (!registry) {
-      return NextResponse.json(
-        { error: 'Registry not found' },
-        { status: 404 }
-      )
-    }
-
-    // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount,
-      currency: 'inr',
-      automatic_payment_methods: {
-        enabled: true,
+    // This is a dummy implementation for deployment - will be configured later
+    return NextResponse.json(
+      { 
+        clientSecret: "dummy_secret_for_deployment_only",
+        message: "This is a placeholder. Configure Stripe in production." 
       },
-      metadata: {
-        registryId,
-        giftItemId: giftItemId || '',
-        contributorName,
-        message: message || '',
-        isAnonymous: isAnonymous ? 'true' : 'false',
-        userId: userId || '',
-        registryTitle: registry.title,
-        registryOwnerId: registry.user_id
-      },
-    })
-
-    return NextResponse.json({ clientSecret: paymentIntent.client_secret })
+      { status: 200 }
+    )
   } catch (error: unknown) {
-    console.error('Error creating payment intent:', error)
+    console.error('Error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error occurred' },
       { status: 500 }

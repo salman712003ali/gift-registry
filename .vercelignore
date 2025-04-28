@@ -1,0 +1,17 @@
+# Build outputs
+.next
+node_modules
+
+# Large files
+*.zip
+gift-registry.zip
+
+# Git related
+.git
+
+# Other large files or directories
+supabase/.temp
+supabase/.branches
+
+# Backup files
+backup_*.sql 

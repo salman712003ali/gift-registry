@@ -2,18 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
-    // This is a dummy implementation for deployment - will be configured later
+    // This is a placeholder implementation for deployment
+    // Will be implemented properly when webhook handling is configured
     return NextResponse.json(
       { 
         received: true,
-        message: "This is a placeholder. Configure Stripe webhooks in production."
+        message: "This is a placeholder. Webhook handling will be configured later."
       },
       { status: 200 }
     )
-  } catch (error: unknown) {
+  } catch (error) {
     console.error('Error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error occurred' },
+      { error: "An error occurred" },
       { status: 500 }
     )
   }

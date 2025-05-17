@@ -1,38 +1,54 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: [
-      'lh3.googleusercontent.com',
-      'avatars.githubusercontent.com',
-      'images.unsplash.com',
-      'xuhvvkdbbfbcpfcyfccj.supabase.co'
-    ],
+    domains: ['xuhvvkdbbfbcpfcyfccj.supabase.co'],
+    formats: ['image/avif', 'image/webp'],
   },
+  // Enable production source maps for better error tracking
+  productionBrowserSourceMaps: true,
+  // Enable React strict mode for better development experience
+  reactStrictMode: true,
+  // Enable SWC minification for better performance
+  swcMinify: true,
+  // Configure headers for security and caching
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: '/:path*',
         headers: [
           {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=31536000; includeSubDomains'
+            key: 'X-DNS-Prefetch-Control',
+            value: 'on'
           },
           {
-            key: 'X-Frame-Options',
-            value: 'DENY'
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload'
           },
           {
             key: 'X-Content-Type-Options',
             value: 'nosniff'
           },
           {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin'
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN'
           },
           {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()'
+            key: 'X-XSS-Protection',
+            value: '1; mode=block'
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'origin-when-cross-origin'
           }
+        ]
+      },
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' }
         ]
       }
     ]

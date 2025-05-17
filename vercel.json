@@ -1,13 +1,13 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
+  "buildCommand": "next build",
+  "devCommand": "next dev",
   "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["iad1"],
-  "github": {
-    "silent": true,
-    "autoAlias": true
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@next_public_supabase_url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@next_public_supabase_anon_key"
   },
   "headers": [
     {
@@ -59,6 +59,12 @@
       "source": "/registry",
       "destination": "/find-registry",
       "permanent": true
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/cleanup",
+      "schedule": "0 0 * * *"
     }
   ]
 } 

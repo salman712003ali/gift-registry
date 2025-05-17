@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'sonner'
 import { ThemeProvider } from "@/components/theme-provider"
+import { PerformanceMonitor } from "@/components/performance-monitor"
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
 
@@ -25,6 +26,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <PerformanceMonitor />
           {children}
           <Toaster position="top-right" richColors closeButton />
         </ThemeProvider>
